@@ -1,12 +1,12 @@
 # 📊 GDT - Gerenciador de Termos
 
-![alt text](image-1.png)
+![alt text](imagens/image-1.png)
 
 > 🏆 Case Real de Transformação Digital: Este projeto foi desenvolvido para resolver um problema real de um Núcleo de Tecnologia da Informação (NTI), transformando um processo operacional analógico em um produto de dados de ponta a ponta.
 
 > 🛡️ Nota de Privacidade (LGPD): Todos os dados, nomes de colaboradores, chamados e patrimônios apresentados neste painel e ao longo deste repositório são 100% fictícios e gerados algoritmicamente via Mock Engine para fins de demonstração, garantindo total conformidade com a Lei Geral de Proteção de Dados.
 
-![alt text](image-2.png)
+![alt text](imagens/image-2.png)
 
 ## 🎯 Problema de Negócio
 O departamento de TI (NTI) enfrentava um colapso de governança de dados impulsionado por um processo operacional obsoleto: a criação manual de Termos de Responsabilidade para entrega e devolução de equipamentos. 
@@ -40,7 +40,7 @@ A arquitetura foi desenhada fundindo Engenharia de Software (MVC) com a Medallio
 ## 🔍 Principais Insights Extraídos (Data Analytics)
 A plataforma destravou a inteligência de negócios oculta no legado da empresa. Com base em uma análise de mais de 1.500 operações documentadas, o painel de BI revelou:
 
-![alt text](image-3.png)
+![alt text](imagens/image-3.png)
 
 - Sazonalidade Identificada: A linha de tendência temporal apontou picos de movimentações (especialmente entregas) estritamente nos meses de Fevereiro (02) e Agosto (08). Esta forte correlação com os ciclos semestrais de contratação permite agora ao setor de compras antecipar o provisionamento de estoque, otimizando o fluxo de caixa.
 - Gargalos e Custo Oculto: O setor de Atendimento ao Cliente dominou completamente o ranking de operações. Ao cruzar este dado com as dimensões de ativos, observou-se uma liderança de Periféricos, revelando um gargalo de desgaste prematuro de mouses e teclados, fundamentando a troca estratégica de fornecedores para equipamentos de maior durabilidade.
