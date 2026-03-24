@@ -85,7 +85,8 @@ def _get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
 
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
+    # Para pastas de rede/nuvem (OneDrive), DELETE é mais estável que WAL
+    conn.execute("PRAGMA journal_mode = DELETE")
     conn.execute("PRAGMA synchronous = NORMAL")
 
     return conn
@@ -972,10 +973,15 @@ def mdm_factory_reset() -> bool:
     db_path = _get_db_path()
     try:
         if os.path.exists(db_path):
+            backup_dir = os.path.join(os.path.dirname(db_path), "backups")
+            os.makedirs(backup_dir, exist_ok=True)
+            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = f"{db_path}.bak_{timestamp}"
+            backup_name = f"reset_backup_{timestamp}.db"
+            backup_path = os.path.join(backup_dir, backup_name)
+            
             shutil.copy2(db_path, backup_path)
-            print(f"✅ Backup de segurança criado: {backup_path}")
+            print(f"✅ Backup de segurança criado no diretório de backups: {backup_name}")
 
         with _get_connection() as conn:
             cursor = conn.cursor()

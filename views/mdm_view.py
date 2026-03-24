@@ -270,40 +270,53 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
             ref_btn_next.current.disabled = not has_more
             page.update()
 
-    def handle_load_table(e: ft.ControlEvent = None) -> None:
+    async def handle_load_table(e: ft.ControlEvent = None) -> None:
+        if getattr(page, "mdm_busy", False):
+            return
+
         if e is not None:
             current_page[0] = 1
         selected_table = ref_db_dropdown.current.value
         if not selected_table:
             return
 
-        if state_table["last_table"] != selected_table:
-            state_table["filters"] = {}
-            state_table["last_table"] = selected_table
+        page.mdm_busy = True
+        try:
+            if state_table["last_table"] != selected_table:
+                state_table["filters"] = {}
+                state_table["last_table"] = selected_table
 
-        limit_val = (
-            int(ref_db_limit.current.value)
-            if (ref_db_limit.current and ref_db_limit.current.value)
-            else 50
-        )
-        offset_val = (current_page[0] - 1) * limit_val
+            limit_val = (
+                int(ref_db_limit.current.value)
+                if (ref_db_limit.current and ref_db_limit.current.value)
+                else 50
+            )
+            offset_val = (current_page[0] - 1) * limit_val
 
-        cols, rows = controller.get_table_data(
-            selected_table, limit=limit_val + 1, offset=offset_val
-        )
+            cols, rows = await asyncio.to_thread(
+                controller.get_table_data,
+                selected_table,
+                limit=limit_val + 1,
+                offset=offset_val,
+            )
 
-        has_more = len(rows) > limit_val
-        if has_more:
-            rows = rows[:limit_val]
+            has_more = len(rows) > limit_val
+            if has_more:
+                rows = rows[:limit_val]
 
-        if state_table["cols"] != cols:
-            state_table["filters"] = {c: None for c in cols}
+            if state_table["cols"] != cols:
+                state_table["filters"] = {c: None for c in cols}
 
-        state_table["cols"], state_table["rows"] = cols, rows
-        _render_table_data_filtered()
-        update_pagination_ui(has_more)
+            state_table["cols"], state_table["rows"] = cols, rows
+            _render_table_data_filtered()
+            update_pagination_ui(has_more)
+        finally:
+            page.mdm_busy = False
 
-    def handle_search_table(e: ft.ControlEvent = None) -> None:
+    async def handle_search_table(e: ft.ControlEvent = None) -> None:
+        if getattr(page, "mdm_busy", False):
+            return
+
         if e is not None:
             current_page[0] = 1
         selected_table, search_term = (
@@ -314,46 +327,56 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
         if not selected_table:
             return
         if not search_term:
-            return handle_load_table(None)
+            return await handle_load_table(None)
 
-        if state_table["last_table"] != selected_table:
-            state_table["filters"] = {}
-            state_table["last_table"] = selected_table
+        page.mdm_busy = True
+        try:
+            if state_table["last_table"] != selected_table:
+                state_table["filters"] = {}
+                state_table["last_table"] = selected_table
 
-        limit_val = (
-            int(ref_db_limit.current.value)
-            if (ref_db_limit.current and ref_db_limit.current.value)
-            else 50
-        )
-        offset_val = (current_page[0] - 1) * limit_val
+            limit_val = (
+                int(ref_db_limit.current.value)
+                if (ref_db_limit.current and ref_db_limit.current.value)
+                else 50
+            )
+            offset_val = (current_page[0] - 1) * limit_val
 
-        cols, rows = controller.search_table(
-            selected_table, search_term, limit=limit_val + 1, offset=offset_val
-        )
+            cols, rows = await asyncio.to_thread(
+                controller.search_table,
+                selected_table,
+                search_term,
+                limit=limit_val + 1,
+                offset=offset_val,
+            )
 
-        has_more = len(rows) > limit_val
-        if has_more:
-            rows = rows[:limit_val]
+            has_more = len(rows) > limit_val
+            if has_more:
+                rows = rows[:limit_val]
 
-        if state_table["cols"] != cols:
-            state_table["filters"] = {c: None for c in cols}
+            if state_table["cols"] != cols:
+                state_table["filters"] = {c: None for c in cols}
 
-        state_table["cols"], state_table["rows"] = cols, rows
-        _render_table_data_filtered()
-        update_pagination_ui(has_more)
+            state_table["cols"], state_table["rows"] = cols, rows
+            _render_table_data_filtered()
+            update_pagination_ui(has_more)
+        finally:
+            page.mdm_busy = False
 
-    def handle_prev_page(e):
+    async def handle_prev_page(e):
         if current_page[0] > 1:
             current_page[0] -= 1
-            handle_search_table(
-                None
-            ) if ref_db_search.current.value else handle_load_table(None)
+            if ref_db_search.current.value:
+                await handle_search_table(None)
+            else:
+                await handle_load_table(None)
 
-    def handle_next_page(e):
+    async def handle_next_page(e):
         current_page[0] += 1
-        handle_search_table(None) if ref_db_search.current.value else handle_load_table(
-            None
-        )
+        if ref_db_search.current.value:
+            await handle_search_table(None)
+        else:
+            await handle_load_table(None)
 
     def handle_edit_record(pk_value, pk_column, row_data, cols):
         selected_table = ref_db_dropdown.current.value
@@ -373,19 +396,25 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
             field_refs[col_name] = ref
             content_col.controls.append(tf)
 
-        def save_edit(e):
+        async def save_edit(e):
             update_data = {
                 k: field_refs[k].current.value for k in field_refs if k != pk_column
             }
-            if controller.update_record(
-                selected_table, pk_column, pk_value, update_data
-            ):
+            res = await asyncio.to_thread(
+                controller.update_record,
+                selected_table,
+                pk_column,
+                pk_value,
+                update_data,
+            )
+            if res:
                 show_snackbar(page, "✅ Registro atualizado no banco!", "green")
                 dlg.open = False
                 page.update()
-                handle_search_table(
-                    None
-                ) if ref_db_search.current.value else handle_load_table()
+                if ref_db_search.current.value:
+                    await handle_search_table(None)
+                else:
+                    await handle_load_table()
             else:
                 show_snackbar(page, "❌ Erro ao atualizar o registro.", "error")
 
@@ -420,14 +449,18 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
     def handle_delete_record(pk_value, pk_column):
         selected_table = ref_db_dropdown.current.value
 
-        def confirm_del(e):
-            if controller.delete_record(selected_table, pk_column, pk_value):
+        async def confirm_del(e):
+            res = await asyncio.to_thread(
+                controller.delete_record, selected_table, pk_column, pk_value
+            )
+            if res:
                 show_snackbar(page, "✅ Registro apagado da base de dados!", "green")
                 dlg.open = False
                 page.update()
-                handle_search_table(
-                    None
-                ) if ref_db_search.current.value else handle_load_table()
+                if ref_db_search.current.value:
+                    await handle_search_table(None)
+                else:
+                    await handle_load_table()
             else:
                 show_snackbar(
                     page, "❌ Restrição Relacional impediu a exclusão.", "error"
@@ -460,7 +493,7 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
         dlg.open = True
         page.update()
 
-    def handle_export_csv(e: ft.ControlEvent) -> None:
+    async def handle_export_csv(e: ft.ControlEvent) -> None:
         selected_table = ref_db_dropdown.current.value
         if not selected_table:
             return
@@ -468,14 +501,23 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
         desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
         arquivo_destino = os.path.join(desktop_path, f"exportacao_{selected_table}.csv")
 
-        if controller.export_table_csv(selected_table, arquivo_destino):
-            show_snackbar(
-                page,
-                f"✅ CSV salvo na Área de Trabalho: exportacao_{selected_table}.csv",
-                "green",
+        page.is_db_locked = True
+        page.update()
+        try:
+            res = await asyncio.to_thread(
+                controller.export_table_csv, selected_table, arquivo_destino
             )
-        else:
-            show_snackbar(page, "❌ Erro ao exportar CSV. Verifique os logs.", "error")
+            if res:
+                show_snackbar(
+                    page,
+                    f"✅ CSV salvo na Área de Trabalho: exportacao_{selected_table}.csv",
+                    "green",
+                )
+            else:
+                show_snackbar(page, "❌ Erro ao exportar CSV. Verifique os logs.", "error")
+        finally:
+            page.is_db_locked = False
+            page.update()
 
     async def handle_import_csv(e: ft.FilePickerResultEvent) -> None:
         if not e.files or len(e.files) == 0:
@@ -533,76 +575,95 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
         finally:
             page.is_db_locked = False
 
-    def handle_vacuum(e: ft.ControlEvent) -> None:
+    async def handle_vacuum(e: ft.ControlEvent) -> None:
         if getattr(page, "is_db_locked", False):
             return
         page.is_db_locked = True
-        if controller.execute_vacuum():
-            show_snackbar(page, "✅ Banco desfragmentado com sucesso!", "green")
-        page.is_db_locked = False
+        page.update()
+        try:
+            if await asyncio.to_thread(controller.execute_vacuum):
+                show_snackbar(page, "✅ Banco desfragmentado com sucesso!", "green")
+        finally:
+            page.is_db_locked = False
+            page.update()
 
-    def handle_optimize(e: ft.ControlEvent) -> None:
+    async def handle_optimize(e: ft.ControlEvent) -> None:
         if getattr(page, "is_db_locked", False):
             return
         page.is_db_locked = True
-        if controller.optimize_indexes():
-            show_snackbar(
-                page, "💡 Engine de índices otimizada com a heurística atual!", "green"
-            )
-        page.is_db_locked = False
+        page.update()
+        try:
+            if await asyncio.to_thread(controller.optimize_indexes):
+                show_snackbar(
+                    page, "💡 Engine de índices otimizada com a heurística atual!", "green"
+                )
+        finally:
+            page.is_db_locked = False
+            page.update()
 
-    def handle_reindex(e: ft.ControlEvent) -> None:
+    async def handle_reindex(e: ft.ControlEvent) -> None:
         if getattr(page, "is_db_locked", False):
             return
         page.is_db_locked = True
-        if controller.reindex_db():
-            show_snackbar(
-                page, "📖 Árvores B-Tree rebalanceadas e índices refeitos!", "green"
-            )
-        page.is_db_locked = False
+        page.update()
+        try:
+            if await asyncio.to_thread(controller.reindex_db):
+                show_snackbar(
+                    page, "📖 Árvores B-Tree rebalanceadas e índices refeitos!", "green"
+                )
+        finally:
+            page.is_db_locked = False
+            page.update()
 
-    def handle_backup(e: ft.ControlEvent) -> None:
+    async def handle_backup(e: ft.ControlEvent) -> None:
         if getattr(page, "is_db_locked", False):
             return
         page.is_db_locked = True
-        if controller.create_backup():
-            show_snackbar(
-                page, "💾 Clone de Segurança do Banco enviado ao Desktop!", "green"
-            )
-        else:
-            show_snackbar(page, "❌ Falha ao criar backup manual.", "error")
-        page.is_db_locked = False
+        page.update()
+        try:
+            if await asyncio.to_thread(controller.create_backup):
+                show_snackbar(
+                    page, "💾 Clone de Segurança do Banco enviado ao Desktop!", "green"
+                )
+            else:
+                show_snackbar(page, "❌ Falha ao criar backup manual.", "error")
+        finally:
+            page.is_db_locked = False
+            page.update()
 
     def handle_delete_duplicates(e: ft.ControlEvent) -> None:
         if getattr(page, "is_db_locked", False):
             return
 
-        def confirm_action(evt):
+        async def confirm_action(evt):
             dlg.open = False
-            page.update()
             page.is_db_locked = True
-            result = controller.delete_duplicates()
+            page.update()
+            try:
+                result = await asyncio.to_thread(controller.delete_duplicates)
 
-            if "error" in result:
-                show_snackbar(page, "❌ Ocorreu um erro ao apagar duplicatas.", "error")
-            else:
-                total_del = sum(result.values())
-                if total_del > 0:
-                    msg = (
-                        f"🧹 Limpeza Concluída! Removidos: "
-                        f"{result.get('tb_termos', 0)} Termos, "
-                        f"{result.get('tb_colaboradores', 0)} Colabs, "
-                        f"{result.get('tb_ativos', 0)} Ativos Órfãos, "
-                        f"{result.get('tb_termo_ativo', 0)} Ligações."
-                    )
-                    show_snackbar(page, msg, "green")
+                if "error" in result:
+                    show_snackbar(page, "❌ Ocorreu um erro ao apagar duplicatas.", "error")
                 else:
-                    show_snackbar(
-                        page,
-                        "✅ O Banco já está limpo. Nenhuma duplicata encontrada.",
-                        "blue_info",
-                    )
-            page.is_db_locked = False
+                    total_del = sum(result.values())
+                    if total_del > 0:
+                        msg = (
+                            f"🧹 Limpeza Concluída! Removidos: "
+                            f"{result.get('tb_termos', 0)} Termos, "
+                            f"{result.get('tb_colaboradores', 0)} Colabs, "
+                            f"{result.get('tb_ativos', 0)} Ativos Órfãos, "
+                            f"{result.get('tb_termo_ativo', 0)} Ligações."
+                        )
+                        show_snackbar(page, msg, "green")
+                    else:
+                        show_snackbar(
+                            page,
+                            "✅ O Banco já está limpo. Nenhuma duplicata encontrada.",
+                            "blue_info",
+                        )
+            finally:
+                page.is_db_locked = False
+                page.update()
 
         dlg = ft.AlertDialog(
             title=ft.Row(
@@ -856,17 +917,20 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
         if getattr(page, "is_db_locked", False):
             return
 
-        def confirm_nuke(evt):
+        async def confirm_nuke(evt):
             dlg.open = False
-            page.update()
             page.is_db_locked = True
-            if controller.factory_reset():
-                show_snackbar(
-                    page,
-                    "☢️ EXPLOSÃO COMPLETA! Banco voltou ao Estado Zero. (.bak salvo)",
-                    "error",
-                )
-            page.is_db_locked = False
+            page.update()
+            try:
+                if await asyncio.to_thread(controller.factory_reset):
+                    show_snackbar(
+                        page,
+                        "☢️ EXPLOSÃO COMPLETA! Banco voltou ao Estado Zero. (.bak salvo)",
+                        "error",
+                    )
+            finally:
+                page.is_db_locked = False
+                page.update()
 
         dlg = ft.AlertDialog(
             title=ft.Row(
@@ -913,7 +977,7 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
         txt_pin = create_form_input("Digite CONFIRMAR", ft.icons.PASSWORD, ref_pin)
         txt_pin.width = 310
 
-        def do_delete(evt):
+        async def do_delete(evt):
             pin_val = ref_pin.current.value if ref_pin.current else ""
             if not pin_val or pin_val.strip().upper() != "CONFIRMAR":
                 show_snackbar(
@@ -922,19 +986,24 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
                 return
 
             dlg.open = False
-            page.update()
             page.is_db_locked = True
+            page.update()
 
-            qtd = controller.delete_by_period(dd_month.value, dd_year.value)
-            if qtd > 0:
-                show_snackbar(
-                    page, f"✅ Limpeza Concluída: {qtd} registros apagados.", "green"
+            try:
+                qtd = await asyncio.to_thread(
+                    controller.delete_by_period, dd_month.value, dd_year.value
                 )
-            elif qtd == 0:
-                show_snackbar(page, "⚠️ Nenhum registro encontrado.", "orange")
-            else:
-                show_snackbar(page, "❌ Ocorreu um erro ao apagar.", "error")
-            page.is_db_locked = False
+                if qtd > 0:
+                    show_snackbar(
+                        page, f"✅ Limpeza Concluída: {qtd} registros apagados.", "green"
+                    )
+                elif qtd == 0:
+                    show_snackbar(page, "⚠️ Nenhum registro encontrado.", "orange")
+                else:
+                    show_snackbar(page, "❌ Ocorreu um erro ao apagar.", "error")
+            finally:
+                page.is_db_locked = False
+                page.update()
 
         dlg = ft.AlertDialog(
             title=ft.Row(
@@ -983,23 +1052,26 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
         )
         txt_pin.width = 300
 
-        def do_truncate(evt):
+        async def do_truncate(evt):
             pin_val = ref_pin_trunc.current.value if ref_pin_trunc.current else ""
             if not pin_val or pin_val.strip().upper() != "CONFIRMAR":
                 show_snackbar(page, "Palavra de segurança incorreta.", "error")
                 return
 
             dlg.open = False
-            page.update()
             page.is_db_locked = True
+            page.update()
 
-            if controller.truncate_table(dd_table.value):
-                show_snackbar(
-                    page, "✅ Destruição Executada! Tabela esvaziada.", "green"
-                )
-            else:
-                show_snackbar(page, f"❌ Erro ao esvaziar {dd_table.value}.", "error")
-            page.is_db_locked = False
+            try:
+                if await asyncio.to_thread(controller.truncate_table, dd_table.value):
+                    show_snackbar(
+                        page, "✅ Destruição Executada! Tabela esvaziada.", "green"
+                    )
+                else:
+                    show_snackbar(page, f"❌ Erro ao esvaziar {dd_table.value}.", "error")
+            finally:
+                page.is_db_locked = False
+                page.update()
 
         dlg = ft.AlertDialog(
             title=ft.Row(
@@ -1108,7 +1180,7 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
     )
 
     # --- 2.8. Closures de Regras ---
-    def handle_add_rule(e: ft.ControlEvent) -> None:
+    async def handle_add_rule(e: ft.ControlEvent) -> None:
         search = ref_rule_search.current.value
         target = ref_rule_target.current.value
         replace = ref_rule_replace.current.value
@@ -1119,7 +1191,7 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
             )
             return
 
-        if controller.add_rule(target, search, replace):
+        if await asyncio.to_thread(controller.add_rule, target, search, replace):
             ref_rule_search.current.value = ""
             ref_rule_replace.current.value = ""
             refresh_rules_ui()
@@ -1127,8 +1199,8 @@ def build_mdm_view(page: ft.Page, app_state: AppState) -> None:
         else:
             show_snackbar(page, "❌ Erro ao salvar regra.", "error")
 
-    def handle_delete_rule(target: str, search: str) -> None:
-        if controller.delete_rule(target, search):
+    async def handle_delete_rule(target: str, search: str) -> None:
+        if await asyncio.to_thread(controller.delete_rule, target, search):
             refresh_rules_ui()
             show_snackbar(page, f"🗑️ Regra '{search}' removida.", "green")
         else:

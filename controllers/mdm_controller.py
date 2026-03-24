@@ -452,7 +452,7 @@ class MDMController:
             "Comercial",
         ]
         ops: List[str] = ["Entrega", "Devolução", "Empréstimo"]
-        tipos: List[str] = ["Notebook", "Desktop", "Monitor", "Smartphone"]
+        tipos: List[str] = ["Notebook", "Desktop", "Monitor", "Projetor", "TV"]
         fabricantes: List[str] = ["Dell", "HP", "Lenovo", "Apple", "Samsung"]
 
         db_path = _get_db_path()

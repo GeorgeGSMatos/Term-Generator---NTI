@@ -317,7 +317,7 @@ def build_history_tab(page: ft.Page, app_state: AppState) -> ft.Column:
         """Ponteiro de ação para visualizar o documento MS Word originário."""
         if p and os.path.exists(p):
             try:
-                await page.run_task(os.startfile, p)
+                os.startfile(p)
             except Exception as ex:
                 show_snackbar(page, f"Erro ao abrir: {ex}", "red", ft.icons.ERROR)
         else:

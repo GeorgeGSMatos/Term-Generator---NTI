@@ -105,8 +105,8 @@ class SimulatedAssetGateway(IAssetGateway):
             ("Notebook", "Dell Latitude 5420"),
             ("Desktop", "Dell Optiplex 7050"),
             ("Monitor", "Samsung T350 24''"),
-            ("Smartphone", "Samsung Galaxy S23"),
-            ("Periférico", "Dock Station Dell WD19"),
+            ("Projetor", "Epson PowerLite X49"),
+            ("TV", "Smart TV Samsung 43''"),
         ]
 
         chosen_type, chosen_model = random.choice(mock_types)

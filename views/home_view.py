@@ -228,7 +228,7 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
             "fabricante": fabricante if fabricante else "Genérico",
             "modelo": desc,
             "serial": serial if serial else "S/N",
-            "descricao_visual": f"{tipo} {fabricante or ''} {desc}".strip(),
+            "descricao_visual": f"{tipo} {fabricante or ''} - {desc}".strip().replace("  - ", " - "),
             "qtd": "1",
             "origem": "Manual",
         }
@@ -247,6 +247,9 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
 
         Suporta Animações UX Inteligentes e Fallbacks.
         """
+        if getattr(page, "is_searching_asset", False):
+            return
+
         value = refs["patrimonio"].current.value.strip()
         # --- 3.8. XSS / Null Protection — Bloqueio de Inputs Perigosos ou Vazios Antes do I/O ---
         if not value or "<" in value or ">" in value or len(value) > 50:
@@ -254,41 +257,45 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
             show_snackbar(page, S.MSG_BUSCA_INVALIDA, "error", ft.icons.GPP_BAD)
             return
 
-        refs["patrimonio"].current.disabled = True
-        refs["patrimonio"].current.suffix = ft.Container(
-            content=ft.ProgressRing(
-                width=16, height=16, stroke_width=2, color=focus_color
-            ),
-            padding=ft.padding.only(right=15),
-        )
-        page.update()
-        await asyncio.sleep(0.1)
-
-        # --- 3.8.1. Instanciamento via Factory — View Agnóstica às Implementações Concretas ---
-        asset_gateway = get_asset_gateway(is_test_mode)
-        result = await AssetService.find_asset(value, page.loop, asset_gateway)
-        status = result.get("status")
-
-        if status == "sucesso":
-            asset = result["data"]
-            app_state.lista_ativos_memoria.append(asset)
-            inject_new_item(asset)
-            refs["patrimonio"].current.value = ""
-            app_state.patrimonio = ""
-            refs["patrimonio"].current.focus()
-        elif status == "nao_encontrado":
-            await shake_control(refs["patrimonio"])
-            show_snackbar(
-                page, S.MSG_ATIVO_NAO_ENCONTRADO, "error", ft.icons.SEARCH_OFF
+        page.is_searching_asset = True
+        try:
+            refs["patrimonio"].current.disabled = True
+            refs["patrimonio"].current.suffix = ft.Container(
+                content=ft.ProgressRing(
+                    width=16, height=16, stroke_width=2, color=focus_color
+                ),
+                padding=ft.padding.only(right=15),
             )
-        else:
-            show_snackbar(
-                page, result.get("msg", S.MSG_ERRO), "error", ft.icons.GPP_BAD
-            )
+            page.update()
+            await asyncio.sleep(0.1)
 
-        refs["patrimonio"].current.disabled = False
-        refs["patrimonio"].current.suffix = None
-        page.update()
+            # --- 3.8.1. Instanciamento via Factory — View Agnóstica às Implementações Concretas ---
+            asset_gateway = get_asset_gateway(is_test_mode)
+            result = await AssetService.find_asset(value, page.loop, asset_gateway)
+            status = result.get("status")
+
+            if status == "sucesso":
+                asset = result["data"]
+                app_state.lista_ativos_memoria.append(asset)
+                inject_new_item(asset)
+                refs["patrimonio"].current.value = ""
+                app_state.patrimonio = ""
+                refs["patrimonio"].current.focus()
+            elif status == "nao_encontrado":
+                await shake_control(refs["patrimonio"])
+                show_snackbar(
+                    page, S.MSG_ATIVO_NAO_ENCONTRADO, "error", ft.icons.SEARCH_OFF
+                )
+            else:
+                show_snackbar(
+                    page, result.get("msg", S.MSG_ERRO), "error", ft.icons.GPP_BAD
+                )
+
+        finally:
+            page.is_searching_asset = False
+            refs["patrimonio"].current.disabled = False
+            refs["patrimonio"].current.suffix = None
+            page.update()
 
     async def handle_add_accessory(e: ft.ControlEvent) -> None:
         """Trata Entradas Rápidas de Teclados, Mouses da Row Auxiliar."""
@@ -535,16 +542,35 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
             ]
             ref_links.current.visible = True
 
-            async def close_overlay_handler(e):
-                ref_overlay.current.opacity = 0
-                ref_overlay_card.current.scale = 0.9
-                ref_overlay.current.update()
-                await asyncio.sleep(0.3)
-                ref_overlay.current.visible = False
-                ref_overlay.current.update()
-                page.data = "livre"
-                page.is_generating = False
-                page.update()
+            def open_folder_handler(e):
+                """Abre a pasta de destino no Windows (Síncrono para evitar falhas silenciosas)."""
+                try:
+                    os.startfile(paths["pasta"])
+                except Exception as ex:
+                    print(f"Erro abrindo pasta: {ex}")
+
+            def close_overlay_handler(e):
+                """Reseta o estado da UI e fecha o modal de progresso de forma robusta."""
+                try:
+                    ref_overlay.current.opacity = 0
+                    if ref_overlay_card.current:
+                        ref_overlay_card.current.scale = 0.9
+                    page.update()
+                    
+                    # Usa uma tarefa paralela para não travar o fechamento
+                    async def finalize_close():
+                        await asyncio.sleep(0.3)
+                        ref_overlay.current.visible = False
+                        page.data = "livre"
+                        page.is_generating = False
+                        page.update()
+                        
+                    asyncio.create_task(finalize_close())
+                except Exception as ex:
+                    print(f"Fail-safe overlay close: {ex}")
+                    ref_overlay.current.visible = False
+                    page.is_generating = False
+                    page.update()
 
             ref_close.current.content = ft.Row(
                 [
@@ -555,7 +581,7 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
                         style=ft.ButtonStyle(
                             color=COLORS.get("text_secondary", "#555555")
                         ),
-                        on_click=lambda e: page.run_task(os.startfile, paths["pasta"]),
+                        on_click=open_folder_handler,
                     ),
                     ft.ElevatedButton(
                         S.BTN_CONCLUIR,
@@ -567,13 +593,16 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
                 ],
                 alignment=ft.MainAxisAlignment.END,
             )
-            ref_close.current.visible = True
-            page.update()
+            try:
+                ref_close.current.visible = True
+                page.update()
+            except Exception as e:
+                pass
 
             if result["config"].get("abrir_auto", True):
                 await asyncio.sleep(0.1)
                 try:
-                    await page.run_task(os.startfile, paths["pdf"])
+                    os.startfile(paths["pdf"])
                 except Exception as ex:
                     print(f"⚠️ Erro ao abrir PDF automaticamente: {ex}")
 
@@ -715,8 +744,8 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
                             ("Notebook", "Notebook"),
                             ("Desktop", "Desktop"),
                             ("Monitor", "Monitor"),
-                            ("Smartphone", "Smartphone"),
-                            ("Periférico", "Periférico"),
+                            ("Projetor", "Projetor"),
+                            ("TV", "TV"),
                             ("Impressora", "Impressora"),
                         ],
                         value="Notebook",
