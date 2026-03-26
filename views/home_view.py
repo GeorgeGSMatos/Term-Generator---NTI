@@ -549,23 +549,18 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
                 except Exception as ex:
                     print(f"Erro abrindo pasta: {ex}")
 
-            def close_overlay_handler(e):
+            async def close_overlay_handler(e):
                 """Reseta o estado da UI e fecha o modal de progresso de forma robusta."""
                 try:
                     ref_overlay.current.opacity = 0
                     if ref_overlay_card.current:
                         ref_overlay_card.current.scale = 0.9
                     page.update()
-                    
-                    # Usa uma tarefa paralela para não travar o fechamento
-                    async def finalize_close():
-                        await asyncio.sleep(0.3)
-                        ref_overlay.current.visible = False
-                        page.data = "livre"
-                        page.is_generating = False
-                        page.update()
-                        
-                    asyncio.create_task(finalize_close())
+                    await asyncio.sleep(0.3)
+                    ref_overlay.current.visible = False
+                    page.data = "livre"
+                    page.is_generating = False
+                    page.update()
                 except Exception as ex:
                     print(f"Fail-safe overlay close: {ex}")
                     ref_overlay.current.visible = False

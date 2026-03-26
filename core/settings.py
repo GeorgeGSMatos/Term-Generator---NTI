@@ -387,7 +387,7 @@ def save_setting(new_data: Dict[str, Any]) -> None:
     Args:
         new_data (Dict[str, Any]): Novos dados a serem persistidos.
     """
-    allowed_keys: List[str] = ["pasta_raiz_rede", "pasta_pdf", "modo_teste", "cidade"]
+    allowed_keys: List[str] = ["pasta_raiz_rede", "pasta_pdf", "modo_teste", "cidade", "abrir_auto"]
     data_to_save = _read_user_paths()
 
     for key, val in new_data.items():
