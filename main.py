@@ -138,7 +138,10 @@ def main(page: ft.Page) -> None:
                 and hasattr(app_state, "fn_clear_form")
                 and app_state.fn_clear_form
             ):
-                app_state.fn_clear_form()
+                try:
+                    app_state.fn_clear_form()
+                except Exception as ex:
+                    print(f"❌ Erro ao acionar atalho Ctrl+Del: {ex}")
 
     page.on_keyboard_event = global_keyboard_handler
 

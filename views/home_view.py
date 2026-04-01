@@ -549,23 +549,29 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
                 except Exception as ex:
                     print(f"Erro abrindo pasta: {ex}")
 
-            async def close_overlay_handler(e):
-                """Reseta o estado da UI e fecha o modal de progresso de forma robusta."""
+            def close_overlay_handler(e):
+                """Reseta o estado da UI e fecha o modal de progresso de forma robusta e síncrona."""
                 try:
                     ref_overlay.current.opacity = 0
                     if ref_overlay_card.current:
                         ref_overlay_card.current.scale = 0.9
-                    page.update()
-                    await asyncio.sleep(0.3)
                     ref_overlay.current.visible = False
                     page.data = "livre"
                     page.is_generating = False
+                    if refs["patrimonio"].current:
+                        try:
+                            refs["patrimonio"].current.focus()
+                        except Exception:
+                            pass
                     page.update()
                 except Exception as ex:
                     print(f"Fail-safe overlay close: {ex}")
-                    ref_overlay.current.visible = False
-                    page.is_generating = False
-                    page.update()
+                    try:
+                        ref_overlay.current.visible = False
+                        page.is_generating = False
+                        page.update()
+                    except Exception:
+                        pass
 
             ref_close.current.content = ft.Row(
                 [
@@ -607,10 +613,15 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
             ref_txt.current.value = f"Erro na Geração: {ex}"
             ref_progress_bar.current.visible = False
 
-            async def close_error(e):
+            def close_error(e):
                 ref_overlay.current.visible = False
-                ref_overlay.current.update()
                 page.is_generating = False
+                if refs["patrimonio"].current:
+                    try:
+                        refs["patrimonio"].current.focus()
+                    except Exception:
+                        pass
+                page.update()
 
             ref_close.current.content = ft.ElevatedButton(
                 S.BTN_FECHAR, on_click=close_error
@@ -688,13 +699,22 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
         )
 
     # --- 3.11. Popups Dialogs System UI ---
+    def fechar_dlg_reset(e):
+        dlg_reset.open = False
+        if refs["patrimonio"].current:
+            try:
+                refs["patrimonio"].current.focus()
+            except Exception:
+                pass
+        page.update()
+
     dlg_reset = ft.AlertDialog(
         modal=True,
         title=ft.Text(S.DLG_TITLE_LIMPAR, selectable=True),
         actions=[
             ft.TextButton(
                 S.BTN_CANCELAR,
-                on_click=lambda e: setattr(dlg_reset, "open", False) or page.update(),
+                on_click=fechar_dlg_reset,
             ),
             ft.ElevatedButton(
                 S.BTN_SIM,
@@ -705,6 +725,15 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
             ),
         ],
     )
+
+    def fechar_dlg_new_asset(e):
+        dlg_new_asset.open = False
+        if refs["patrimonio"].current:
+            try:
+                refs["patrimonio"].current.focus()
+            except Exception:
+                pass
+        page.update()
 
     dlg_new_asset = ft.AlertDialog(
         modal=True,
@@ -772,9 +801,7 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
                 controls=[
                     ft.TextButton(
                         S.BTN_CANCELAR,
-                        on_click=lambda e: (
-                            setattr(dlg_new_asset, "open", False) or page.update()
-                        ),
+                        on_click=fechar_dlg_new_asset,
                     ),
                     create_primary_button(
                         "Adicionar Ativo", on_click=handle_manual_asset_confirm
