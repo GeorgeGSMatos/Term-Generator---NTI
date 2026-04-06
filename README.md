@@ -1,4 +1,4 @@
-# 📊 GDT - Gerenciador de Termos
+# GDT - Gerenciador de Termos
 
 ![alt text](imagens/image-1.png)
 
