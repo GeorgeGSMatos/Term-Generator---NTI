@@ -271,7 +271,24 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
 
             # --- 3.8.1. Instanciamento via Factory — View Agnóstica às Implementações Concretas ---
             asset_gateway = get_asset_gateway(is_test_mode)
-            result = await AssetService.find_asset(value, page.loop, asset_gateway)
+
+            # --- 3.8.2. Timeout de Segurança — Previne Busca Infinita em Caso de Travamento ---
+            try:
+                result = await asyncio.wait_for(
+                    AssetService.find_asset(value, page.loop, asset_gateway),
+                    timeout=15.0,
+                )
+            except asyncio.TimeoutError:
+                result = {
+                    "status": "nao_encontrado",
+                    "msg": S.MSG_ATIVO_NAO_ENCONTRADO,
+                }
+            except Exception:
+                result = {
+                    "status": "nao_encontrado",
+                    "msg": S.MSG_ATIVO_NAO_ENCONTRADO,
+                }
+
             status = result.get("status")
 
             if status == "sucesso":
@@ -291,11 +308,23 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
                     page, result.get("msg", S.MSG_ERRO), "error", ft.icons.GPP_BAD
                 )
 
+        except Exception:
+            try:
+                show_snackbar(
+                    page, S.MSG_ATIVO_NAO_ENCONTRADO, "error", ft.icons.SEARCH_OFF
+                )
+            except Exception:
+                pass
+
         finally:
             page.is_searching_asset = False
-            refs["patrimonio"].current.disabled = False
-            refs["patrimonio"].current.suffix = None
-            page.update()
+            try:
+                if refs["patrimonio"].current:
+                    refs["patrimonio"].current.disabled = False
+                    refs["patrimonio"].current.suffix = None
+                page.update()
+            except Exception:
+                pass
 
     async def handle_add_accessory(e: ft.ControlEvent) -> None:
         """Trata Entradas Rápidas de Teclados, Mouses da Row Auxiliar."""
@@ -437,16 +466,25 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
 
             # --- 3.9.5. Broadcast Inter-componentes Polling Update ---
             if app_state.fn_update_history:
-                app_state.fn_update_history()
+                try:
+                    app_state.fn_update_history()
+                except Exception:
+                    pass
             if app_state.fn_update_dashboard:
-                app_state.fn_update_dashboard()
+                try:
+                    app_state.fn_update_dashboard()
+                except Exception:
+                    pass
 
-            async def copy_summary_action(e):
-                text = TermService.generate_summary_copy(
-                    ui_data, app_state.lista_ativos_memoria
-                )
-                page.set_clipboard(text)
-                show_snackbar(page, S.MSG_RESUMO_COPIADO, "text", ft.icons.COPY_ALL)
+            def copy_summary_action(e):
+                try:
+                    text = TermService.generate_summary_copy(
+                        ui_data, app_state.lista_ativos_memoria
+                    )
+                    page.set_clipboard(text)
+                    show_snackbar(page, S.MSG_RESUMO_COPIADO, "text", ft.icons.COPY_ALL)
+                except Exception as copy_err:
+                    print(f"⚠️ Erro ao copiar resumo: {copy_err}")
 
             ref_links.current.controls = [
                 ft.Container(
@@ -568,7 +606,11 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
                     print(f"Fail-safe overlay close: {ex}")
                     try:
                         ref_overlay.current.visible = False
-                        page.is_generating = False
+                    except Exception:
+                        pass
+                    page.data = "livre"
+                    page.is_generating = False
+                    try:
                         page.update()
                     except Exception:
                         pass
@@ -608,26 +650,46 @@ def build_home_view(page: ft.Page, app_state: AppState) -> None:
                     print(f"⚠️ Erro ao abrir PDF automaticamente: {ex}")
 
         except Exception as ex:
-            ref_icon.current.name = ft.icons.ERROR_OUTLINE
-            ref_icon.current.color = COLORS.get("error", "red")
-            ref_txt.current.value = f"Erro na Geração: {ex}"
-            ref_progress_bar.current.visible = False
+            try:
+                ref_icon.current.name = ft.icons.ERROR_OUTLINE
+                ref_icon.current.color = COLORS.get("error", "red")
+                ref_txt.current.value = f"Erro na Geração: {ex}"
+                ref_progress_bar.current.visible = False
+            except Exception:
+                pass
 
             def close_error(e):
-                ref_overlay.current.visible = False
+                try:
+                    ref_overlay.current.visible = False
+                except Exception:
+                    pass
+                page.data = "livre"
                 page.is_generating = False
                 if refs["patrimonio"].current:
                     try:
                         refs["patrimonio"].current.focus()
                     except Exception:
                         pass
-                page.update()
+                try:
+                    page.update()
+                except Exception:
+                    pass
 
-            ref_close.current.content = ft.ElevatedButton(
-                S.BTN_FECHAR, on_click=close_error
-            )
-            ref_close.current.visible = True
-            page.update()
+            try:
+                ref_close.current.content = ft.ElevatedButton(
+                    S.BTN_FECHAR, on_click=close_error
+                )
+                ref_close.current.visible = True
+                page.update()
+            except Exception:
+                # --- Fallback: se nem o botão de fechar renderizar, libera o estado ---
+                page.data = "livre"
+                page.is_generating = False
+                try:
+                    ref_overlay.current.visible = False
+                    page.update()
+                except Exception:
+                    pass
 
     def handle_name_change(e: ft.ControlEvent) -> None:
         """Autofill Inteligente baseado nas Associações Históricas de RAM/Disk de Setor."""

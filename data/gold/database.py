@@ -85,8 +85,9 @@ def _get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
 
     conn.execute("PRAGMA foreign_keys = ON")
-    # Para pastas de rede/nuvem (OneDrive), DELETE é mais estável que WAL
-    conn.execute("PRAGMA journal_mode = DELETE")
+    # Para evitar arquivos temporários (.db-journal) na rede, usamos MEMORY
+    conn.execute("PRAGMA journal_mode = MEMORY")
+    conn.execute("PRAGMA temp_store = MEMORY")
     conn.execute("PRAGMA synchronous = NORMAL")
 
     return conn
@@ -1176,7 +1177,7 @@ def mdm_create_backup() -> str:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_name = f"backup_database_{timestamp}.sqlite"
             backup_path = os.path.join(desktop_path, backup_name)
-            with sqlite3.connect(db_path) as src, sqlite3.connect(backup_path) as dst:
+            with _get_connection() as src, sqlite3.connect(backup_path) as dst:
                 src.backup(dst)
             return backup_name
         return ""
@@ -1466,7 +1467,8 @@ def mdm_truncate_table(table_name: str) -> bool:
         return False
     try:
         db_path = _get_db_path()
-        conn = sqlite3.connect(db_path, isolation_level=None)
+        conn = _get_connection()
+        conn.isolation_level = None
         cursor = conn.cursor()
 
         cursor.execute("PRAGMA foreign_keys = OFF")
@@ -1498,7 +1500,7 @@ def get_available_sectors() -> List[str]:
     """
     try:
         db_path = _get_db_path()
-        with sqlite3.connect(db_path) as conn:
+        with _get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT DISTINCT c.area 
@@ -1530,7 +1532,7 @@ def get_dashboard_raw(
     """
     try:
         db_path = _get_db_path()
-        with sqlite3.connect(db_path) as conn:
+        with _get_connection() as conn:
             cursor = conn.cursor()
 
             # --- 7.1. Construção do Filtro WHERE ---

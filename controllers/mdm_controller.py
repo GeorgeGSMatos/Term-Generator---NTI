@@ -30,6 +30,7 @@ from data.bronze.data_importer import run_smart_sync_generator
 
 # --- 1.3. Acesso a Dados (Gold Layer) ---
 from data.gold.database import (
+    _get_connection,
     _get_db_path,
     get_available_dates,
     init_db,
@@ -395,7 +396,7 @@ class MDMController:
         """
         db_path = _get_db_path()
         try:
-            conn = sqlite3.connect(db_path)
+            conn = _get_connection()
             cursor = conn.cursor()
             cursor.execute("PRAGMA foreign_keys = ON")
 
@@ -457,7 +458,7 @@ class MDMController:
 
         db_path = _get_db_path()
         try:
-            conn = sqlite3.connect(db_path)
+            conn = _get_connection()
             cursor = conn.cursor()
             cursor.execute("PRAGMA foreign_keys = ON")
 

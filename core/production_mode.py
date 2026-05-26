@@ -54,14 +54,17 @@ class RealAssetGateway(IAssetGateway):
             Dict[str, Any]: Status da busca e objeto do ativo normalizado.
         """
         try:
-            local_res: Optional[Dict[str, Any]] = await loop.run_in_executor(
-                None, find_asset_details, asset_tag
+            local_res: Optional[Dict[str, Any]] = await asyncio.wait_for(
+                loop.run_in_executor(None, find_asset_details, asset_tag),
+                timeout=10.0,
             )
 
             if local_res:
                 clean_data = normalize_item(local_res)
                 return {"status": "sucesso", "data": clean_data}
 
+        except asyncio.TimeoutError:
+            print(f"⚠️ Timeout na busca do ativo: {asset_tag}")
         except Exception as e:
             print(f"⚠️ Erro na Estratégia de BD Local: {e}")
 
