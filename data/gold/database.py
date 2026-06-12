@@ -71,6 +71,18 @@ def _get_db_path() -> str:
     return os.path.join(target_dir, db_filename)
 
 
+class SafeConnection(sqlite3.Connection):
+    """Classe de conexão SQLite customizada para garantir o fechamento automático
+    do arquivo físico do banco ao final do gerenciador de contexto 'with'.
+    """
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            super().__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            self.close()
+
+
 def _get_connection() -> sqlite3.Connection:
     """Instancia uma conexão ativa com o motor SQLite.
 
@@ -82,7 +94,7 @@ def _get_connection() -> sqlite3.Connection:
     db_path: str = _get_db_path()
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, factory=SafeConnection)
 
     conn.execute("PRAGMA foreign_keys = ON")
     # Para evitar arquivos temporários (.db-journal) na rede, usamos MEMORY
